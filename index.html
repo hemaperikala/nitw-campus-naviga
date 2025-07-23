@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NITW Campus Navigator</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"/>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    .controls {
+      background: #004080;
+      padding: 10px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .controls select, .controls button {
+      padding: 6px 8px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .controls button {
+      background: #002147;
+      color: #fff;
+      cursor: pointer;
+    }
+    #map { flex: 1; }
+    #directions {
+      max-height: 180px;
+      overflow-y: auto;
+      padding: 10px;
+      background: #eef;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="controls">
+    <label>From:
+      <select id="start"></select>
+    </label>
+    <label>To:
+      <select id="end"></select>
+    </label>
+    <button onclick="findPath()">Show Route</button>
+  </div>
+
+  <div id="map"></div>
+  <div id="directions"><b>Directions:</b> Please select points.</div>
+
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script>
+    const locations = {
+      main_gate: [17.98341, 79.53193],
+      admin_building: [17.9836, 79.5321],
+      academic_blocks: [17.9840, 79.5325],
+      central_library: [17.9839, 79.5327],
+      computer_centre: [17.9837, 79.5326],
+      workshops: [17.9835, 79.5324],
+      innovation_garage: [17.9838, 79.5322],
+      data_centre: [17.9836, 79.5323],
+      health_centre: [17.9833, 79.5320],
+      auditorium: [17.9837, 79.5318],
+      sac: [17.9838, 79.5317],
+      hostel_1: [17.9845, 79.5328],
+      hostel_2: [17.9843, 79.5325],
+      indoor_games: [17.9841, 79.5323],
+      sports_pavilion: [17.9839, 79.5319],
+      multipurpose_ground: [17.9837, 79.5315],
+      time_square: [17.9835, 79.5313],
+      mme_lawn: [17.9834, 79.5316],
+      guest_house: [17.9836, 79.5330],
+      shopping_complex: [17.9837, 79.5329]
+    };
+
+    const graph = {};
+    for (let a in locations) {
+      graph[a] = {};
+      for (let b in locations) {
+        if (a !== b) {
+          const dx = locations[a][0] - locations[b][0];
+          const dy = locations[a][1] - locations[b][1];
+          const km = Math.hypot(dx, dy) * 111;
+          graph[a][b] = +km.toFixed(2);
+        }
+      }
+    }
+
+    const map = L.map('map').setView(locations.main_gate, 17);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    Object.entries(locations).forEach(([k, v]) => {
+      L.marker(v).addTo(map)
+        .bindPopup(k.replace(/_/g,' ').toUpperCase());
+    });
+
+    // Populate dropdowns
+    const startEl = document.getElementById('start');
+    const endEl = document.getElementById('end');
+    for (let key of Object.keys(locations)) {
+      const label = key.replace(/_/g,' ');
+      startEl.add(new Option(label, key));
+      endEl.add(new Option(label, key));
+    }
+
+    function dijkstra(s, t) {
+      const dist = {}, prev = {}, Q = new Set(Object.keys(graph));
+      Q.forEach(u => dist[u] = Infinity);
+      dist[s] = 0;
+      while (Q.size) {
+        let u = [...Q].reduce((a,b) => dist[a] < dist[b] ? a : b);
+        Q.delete(u);
+        if (u === t) break;
+        for (let [v, w] of Object.entries(graph[u])) {
+          const alt = dist[u] + w;
+          if (alt < dist[v]) { dist[v] = alt; prev[v] = u; }
+        }
+      }
+      const path = [];
+      for (let u = t; u; u = prev[u]) path.unshift(u);
+      return path[0] === s ? path : [];
+    }
+
+    let currentLine = null;
+
+    function findPath() {
+      const s = startEl.value, t = endEl.value;
+      if (s === t) {
+        alert("Please select different From/To.");
+        return;
+      }
+      const path = dijkstra(s, t);
+      if (!path.length) {
+        alert("No path found.");
+        return;
+      }
+      const coords = path.map(x => locations[x]);
+      if (currentLine) map.removeLayer(currentLine);
+      currentLine = L.polyline(coords, { color: '#004080', weight: 4 }).addTo(map);
+      map.fitBounds(currentLine.getBounds());
+
+      let html = `<b>Directions:</b><br>`;
+      const total = path.slice(1).reduce((acc, _, i) => acc + graph[path[i]][path[i+1]], 0).toFixed(2);
+      html += `Total distance: <b>${total} km</b><br>`;
+      path.forEach((p,i) => {
+        if (i < path.length -1)
+          html += `→ From <b>${p.replace(/_/g,' ')}</b> to <b>${path[i+1].replace(/_/g,' ')}</b><br>`;
+      });
+      document.getElementById('directions').innerHTML = html;
+    }
+  </script>
+
+</body>
+</html>
